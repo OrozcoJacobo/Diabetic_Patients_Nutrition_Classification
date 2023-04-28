@@ -154,7 +154,122 @@ def evaluate_metrics(yt, yp):
 evaluate_metrics(y_test, l2_preds)
 #Observe that the evalutation results show a logistic model that has relatively good performance on this multinomial classification task
 #The overall accuracy is around 0.77 and the f1score is around 0.8. Note that for recall, precision and f1score, the output shows values for each class to see how the model performs on an indiviudal class
-#see from the results the recall for class 2 (More Often) is not very good. This is actually  common problem called imbalanced classification challenge(but I will not fix it for now, its not the focus right now)
+#see from the results the recall for class 2 (More Often) is not very good. This is actually common problem called imbalanced classification challenge(but I will not fix it for now, its not the focus right now)
 
 
 #%%
+#Define anothe logistic regression model with l1 penalty this time, to see if our classification performance would be improved
+#L1 penalty to shrink coefficients without removing any features from the model 
+penalty = 'l1'
+#Our classification problem is multinomial
+multi_class = 'multinomial'
+#Use the saga for L1 penalty and multinomial classes
+solver = 'saga'
+#Max iteration = 1000
+max_iter = 1000
+
+
+# %%
+#Define a logistic regression model with abouve arguments
+l1_model = LogisticRegression(random_state=random_state, penalty=penalty, multi_class=multi_class, solver=solver, max_iter=max_iter)
+
+#Start to train the new l1_model with the new training dataset
+l1_model.fit(X_train, y_train)
+
+# %%
+#Make predictions using the input in the test dataset
+l1_preds = l1_model.predict(X_test)
+#Check the class probability distribution using the predict_proba function. We want to see the probabilities the first instance in the test dataset:
+odd_ratios = l1_model.predict_log_proba(X_test[:1, :])[0]
+odd_ratios
+
+
+# %%
+#Class 1 has the largest probability 0.96, as such, the model prediction for this instance will be class 1 and this is the same as the predict method
+l1_model.predict(X_test[:1, :])[0]
+
+
+# %%
+#Given the true labels (y_test) and predictions, we can evaluate the model perfomance by calling the utility evaluate_metrics method
+evaluate_metrics(y_test, l1_preds)
+#Observe this logistic regression with l1 penalty may remove some correlated feature variables by shrinkig their coefficients to zero.
+#As such the model is much simplified to avoid overfitting on the training data and better aligned with the logistic regression assumption
+#that all features should be independent
+
+
+#%%
+#CONFUSION MATRIX
+#Plot the confusion matrix based on the true labels and predictions using the confusion_matrix by sklearn
+conf_matrix = confusion_matrix(y_test, l1_preds)
+#visualize it using a heatmap
+plt.figure(figsize=(16,12))
+ax = sns.heatmap(conf_matrix, annot=True, fmt = 'd', xticklabels=['In Moderation','Less Often', 'More Often'],
+                 yticklabels=['In Moderation', 'Less Often', 'More Often'])
+ax.set(title='Confusion Matrix')
+
+#%%
+#INTERPRT LOGISITCI REGRESSION MODELS
+#One way to interpret logistic regression models is by analyzing feature coffieicients. Although it may not be as 
+#effective as the regular linear regression models because the logistic regression model has a sigmoid function, can still
+#get a sense for the importance or impact of each feature
+
+#Check the coefficients for logistic regression model using its coeff_ attribute
+l1_model.coef_
+#The coef_ is a coefficients list with three elemetns, one element is the actual coefficients for class 0, 1, 2. 
+#To better analuze the coefficients, use three utility methos to sorth and visualize them 
+
+
+# %%
+#Extract and sort feature coefficients
+def get_feature_coefs(regression_model, label_index, columns):
+    coef_dict = {}
+    for coef, feat in zip(regression_model.coef_[label_index, :], columns):
+        if abs(coef) >= 0.01:
+            coef_dict[feat] = coef
+    #Sort coefficients
+    coef_dict = {k: v for k, v in sorted(coef_dict.items(), key=lambda item: item[1])}
+    return coef_dict
+
+#Generate bar colors based on if value is negative or possitive
+def get_bar_colors(values):
+    color_vals = []
+    for val in values:
+        if val <= 0:
+            color_vals.append('r')
+        else:
+            color_vals.append('g')
+    return color_vals
+
+#Visualize coefficients
+def visualize_coefs(coef_dict):
+    features = list(coef_dict.keys())
+    values = list(coef_dict.values())
+    y_pos = np.arange(len(features))
+    color_vals = get_bar_colors(values)
+    plt.rcdefaults()
+    fig, ax = plt.subplots()
+    ax.barh(y_pos, values, align='center', color=color_vals)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(features)
+    #labels read top-to-bottom
+    ax.invert_yaxis()
+    ax.set_xlabel('Feature Coefficients')
+    ax.set_title('')
+    plt.show()
+
+
+#%%
+#Then, let's visualize the sorted coefficient for class 1, the Less Often class:
+#Get the coefficients for Class1, Less Often
+coef_dict = get_feature_coefs(l1_model, 1, feature_cols)
+visualize_coefs(coef_dict)
+#Observe how unhealthy nutrients such as Saturated Fat, Sugars, Cholesterol, Total Fat, etc, have high coefficients and will
+#more likely to be categorized in the 'Less Often' class
+
+
+# %%
+#Now let;s see the coefficients for Class 2, More Often:
+coef_dict = get_feature_coefs(l1_model, 2, feature_cols)
+visualize_coefs(coef_dict)
+#Conversely, if a food item has a high amount of calories, total carnohydrates, and total fat, the it is unlikely to be categorized in the More Often class
+
